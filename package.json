@@ -1,0 +1,81 @@
+{
+  "name": "dynamodb-toolbox-extra",
+  "version": "0.0.1",
+  "description": "DynamoDB Toolbox wrappers and utilities for DRYer code, stricter typing, hash ids and more",
+  "keywords": [
+    "dynamodb",
+    "aws",
+    "database",
+    "nosql"
+  ],
+  "homepage": "https://github.com/dolsem/dynamodb-toolbox-extra",
+  "bugs": "https://github.com/dolsem/dynamodb-toolbox-extra/issues",
+  "author": "Denis Olsem <dols3m@gmail.com>",
+  "repository": "dolsem/dynamodb-toolbox-extra",
+  "main": "./build/cjs/index.js",
+  "module": "./build/esm/index.js",
+  "types": "./build/src/index.d.ts",
+  "license": "MIT",
+  "engines": {
+    "node": "^18.7.0 || >= 16",
+    "npm": "^8.16.0 || >= 8"
+  },
+  "volta": {
+    "node": "18.7.0",
+    "npm": "8.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "npm run clean && npm run type:dts && npm run build:main",
+    "build:main": "node -r ./esbuild-hook ./scripts/build",
+    "clean": "node -r ./esbuild-hook ./scripts/clean",
+    "type:dts": "tsc --emitDeclarationOnly",
+    "type:check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts --fix",
+    "lint:check": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "spell:check": "cspell \"{README.md,CODE_OF_CONDUCT.md,CONTRIBUTING.md,.github/*.md,src/**/*.ts}\"",
+    "cz": "cz",
+    "semantic-release": "semantic-release"
+  },
+  "devDependencies": {
+    "@ryansonshine/commitizen": "^4.2.8",
+    "@ryansonshine/cz-conventional-changelog": "^3.3.4",
+    "@semantic-release/changelog": "^6.0.1",
+    "@semantic-release/commit-analyzer": "^9.0.2",
+    "@semantic-release/github": "^8.0.6",
+    "@semantic-release/npm": "^9.0.1",
+    "@semantic-release/release-notes-generator": "^10.0.3",
+    "@types/node": "^18.7.16",
+    "@types/prompts": "^2.0.14",
+    "@typescript-eslint/eslint-plugin": "^5.36.2",
+    "@typescript-eslint/parser": "^5.36.2",
+    "c8": "^7.12.0",
+    "cspell": "^6.8.1",
+    "dynamodb-toolbox-types": "npm:@dolsem/dynamodb-toolbox@^0.5.0-beta.0-1",
+    "esbuild": "^0.15.7",
+    "eslint": "^8.23.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-import-resolver-typescript": "^3.5.1",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-import": "^2.26.0",
+    "nyc": "^15.1.0",
+    "prompts": "^2.4.2",
+    "semantic-release": "^19.0.5",
+    "slugify": "^1.6.5",
+    "source-map-support": "^0.5.21",
+    "typescript": "^4.8.3",
+    "vitest": "^0.22.1"
+  },
+  "overrides": {
+    "semver-regex": "3.1.4"
+  },
+  "dependencies": {
+    "base64url": "^3.0.1",
+    "dynamodb-toolbox": "^0.4.3"
+  }
+}
