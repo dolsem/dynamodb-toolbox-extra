@@ -215,6 +215,10 @@ export class Entity<
   // };
 }
 
+export type DTO<E extends Entity<any, any, any>, Override extends {} = {}> = E extends Entity<infer NKA, any, any>
+  ? Omit<{ [V in keyof NKA]: InferItemAttributeValue<NKA, V> }, keyof Override>&Override
+  : never;
+
 // Attributes.addIndexKeys({ [GSI1]: () => [,,] })
 // gsi = new GSI<Entity1|Entity2>()
 // gsi.query(...)
