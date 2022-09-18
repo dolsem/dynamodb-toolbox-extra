@@ -1,6 +1,6 @@
 {
   "name": "dynamodb-toolbox-extra",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "DynamoDB Toolbox wrappers and utilities for DRYer code, stricter typing, hash ids and more",
   "keywords": [
     "dynamodb",
@@ -30,6 +30,7 @@
   "scripts": {
     "build": "npm run clean && npm run type:dts && npm run build:main",
     "build:main": "node -r ./esbuild-hook ./scripts/build",
+    "prepublishOnly": "npm run build",
     "clean": "node -r ./esbuild-hook ./scripts/clean",
     "type:dts": "tsc --emitDeclarationOnly",
     "type:check": "tsc --noEmit",
