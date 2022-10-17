@@ -50,7 +50,7 @@ type HasDefault<NKA extends NonKeyAttributes, K extends keyof NKA> = NKA[K] exte
   ? O.Has<NKA[K], 'default'> extends 1 ? true : false
   : false;
 type Required<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (IsOptional<NKA, K> extends true ? never : K) }[keyof NKA];
-type AlwaysPresent<NKA extends NonKeyAttributes> = Required<NKA>|{ [K in keyof NKA]: (HasDefault<NKA, K> extends true ? K : never) }[keyof NKA];
+type AlwaysPresent<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (HasDefault<NKA, K> extends true ? K : never) }[keyof NKA];
 
 class AttributesBase<NKA extends NonKeyAttributes, KA extends KeyAttributes, IKA extends IndexKeyAttributes> {
   constructor(public nonKeyAttributes: NKA, public keys: KA, public indexKeys: IKA) {}
@@ -61,12 +61,18 @@ class AttributesBase<NKA extends NonKeyAttributes, KA extends KeyAttributes, IKA
 }
 
 class AttributesWithoutIndexKeys<NKA extends NonKeyAttributes, KA extends KeyAttributes> extends AttributesBase<NKA, KA, {}> {
-  addIndexKeys<T extends Record<string, (v: { [V in AlwaysPresent<NKA>]: InferItemAttributeValue<NKA, V> }) => string[]>>(indexKeys: T) {
-    const indexKeyDefinitions = Object.keys(indexKeys).reduce((acc, indexKey: keyof T) => {
+  addIndexKeys<
+    D extends Record<string, (Required<NKA>|AlwaysPresent<NKA>)[]>,
+    T extends { [N in keyof D]: (v: { [V in D[N][number]]: InferItemAttributeValue<NKA, V> }) => string[] },
+  >({ get: indexKeys }: { get: T, deps?: D }) {
+    type Data =
+      & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
+      & { [V in AlwaysPresent<NKA>]?: InferItemAttributeValue<NKA, V> };
+    const indexKeyDefinitions = Object.keys(indexKeys).reduce((acc, indexKey: keyof D) => {
       const get = indexKeys[indexKey];
-      acc[indexKey] = { hidden: true, default: (v: { [V in keyof NKA]: InferItemAttributeValue<NKA, V> }) => get(v).join('#') };
+      acc[indexKey] = { hidden: true, default: (v) => get(v).join('#') };
       return acc;
-    }, {} as { [K in keyof T]: IndexKeyAttribute }); // eslint-disable-line @typescript-eslint/prefer-reduce-type-parameter
+    }, {} as { [N in keyof D]: { hidden: true, default: (v: Pick<Data, D[N][number]> & Record<string, any>) => string } });
     return new AttributesBase(this.nonKeyAttributes, this.keys, indexKeyDefinitions);
   }
 }
@@ -74,11 +80,20 @@ class AttributesWithoutIndexKeys<NKA extends NonKeyAttributes, KA extends KeyAtt
 class AttributesWithPartitionKey<
   NKA extends NonKeyAttributes, KA extends KeyAttributes
 > extends AttributesWithoutIndexKeys<NKA, KA> {
-  addSortKey<N extends string>(name: N, get: (v: { [V in AlwaysPresent<NKA>]: InferItemAttributeValue<NKA, V> }) => string[]) {
+  addSortKey<N extends string, D extends (Required<NKA>|AlwaysPresent<NKA>)[]>(
+    name: N,
+    { get }: {
+      get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
+      deps?: D;
+    },
+  ) {
+    type Data =
+      & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
+      & { [V in AlwaysPresent<NKA>]?: InferItemAttributeValue<NKA, V> };
     const sortKey = {
       sortKey: true,
       hidden: true,
-      default: (v: { [V in keyof NKA]: InferItemAttributeValue<NKA, V> }) => get(v).join('#'),
+      default: (v: Pick<Data, D[number]> & Record<string, any>) => get(v).join('#'),
     } as const;
     const keyAttributes = Object.assign(this.keys, { [name]: sortKey } as { [K in N]: typeof sortKey });
     return new AttributesWithoutIndexKeys(this.nonKeyAttributes, keyAttributes, {});
@@ -88,13 +103,24 @@ class AttributesWithPartitionKey<
 export class Attributes<NKA extends NonKeyAttributes> {
   constructor(public nonKeyAttributes: NKA) {}
 
-  addPartitionKey<N extends string>(name: N, get: (v: { [V in AlwaysPresent<NKA>]: InferItemAttributeValue<NKA, V> }) => string[]) {
+  addPartitionKey<N extends string, D extends (Required<NKA>|AlwaysPresent<NKA>)[]>(
+    name: N,
+    { get }: {
+      get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
+      deps?: D;
+    },
+  ) {
+    type Data =
+      & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
+      & { [V in AlwaysPresent<NKA>]?: InferItemAttributeValue<NKA, V> };
     const key = {
       partitionKey: true,
       hidden: true,
-      default: (v: { [V in keyof NKA]: InferItemAttributeValue<NKA, V> }) => get(v).join('#'),
+      default: (v: Pick<Data, D[number]> & Record<string, any>) => get(v).join('#'),
     } as const;
-    const keyAttributes = { [name]: key } as { [K in N]: typeof key };
+    const keyAttributes = { [name]: key } as {
+      [K in N]: typeof key
+    };
     return new AttributesWithPartitionKey(this.nonKeyAttributes, keyAttributes, {});
   }
 }
@@ -166,6 +192,8 @@ export class Entity<
 > {
   $attributes: AttributesBase<NKA, KA, IKA>;
 
+  declare $dto: { [V in keyof NKA]: InferItemAttributeValue<NKA, V> };
+
   constructor({ attributes, ...rest  }: Omit<
     EntityConstructor<
       _EntityTable, _Name, _AutoExecute, _AutoParse, _Timestamps, _CreatedAlias, _ModifiedAlias, _TypeAlias, {}
@@ -200,6 +228,16 @@ export class Entity<
     return key;
   }
 
+  key<K extends keyof KA>(keyAttribute: K, v: Parameters<KA[K]["default"]>[0]): string {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-return
+    return this.$attributes.keys[keyAttribute].default(v);
+  }
+
+  indexKey<IK extends keyof IKA>(indexKeyAttribute: IK, v: Parameters<IKA[IK]["default"]>[0]): typeof v {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-return
+    return this.$attributes.indexKeys[indexKeyAttribute].default(v);
+  }
+
   // queryIndex(index: <sum type>, {...})
 
 
@@ -214,10 +252,6 @@ export class Entity<
   //   return super.delete(keys);
   // };
 }
-
-export type DTO<E extends Entity<any, any, any>, Override extends {} = {}> = E extends Entity<infer NKA, any, any>
-  ? Omit<{ [V in keyof NKA]: InferItemAttributeValue<NKA, V> }, keyof Override>&Override
-  : never;
 
 // Attributes.addIndexKeys({ [GSI1]: () => [,,] })
 // gsi = new GSI<Entity1|Entity2>()
