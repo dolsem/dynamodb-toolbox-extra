@@ -1,6 +1,6 @@
 {
   "name": "dynamodb-toolbox-extra",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "DynamoDB Toolbox wrappers and utilities for DRYer code, stricter typing, hash ids and more",
   "keywords": [
     "dynamodb",
