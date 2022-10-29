@@ -51,6 +51,7 @@ type HasDefault<NKA extends NonKeyAttributes, K extends keyof NKA> = NKA[K] exte
   : false;
 type Required<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (IsOptional<NKA, K> extends true ? never : K) }[keyof NKA];
 type AlwaysPresent<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (HasDefault<NKA, K> extends true ? K : never) }[keyof NKA];
+type MaybeAbsent<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (IsOptional<NKA, K> extends true ? (HasDefault<NKA, K> extends true ? never : K) : never) }[keyof NKA];
 
 class AttributesBase<NKA extends NonKeyAttributes, KA extends KeyAttributes, IKA extends IndexKeyAttributes> {
   constructor(public nonKeyAttributes: NKA, public keys: KA, public indexKeys: IKA) {}
@@ -192,7 +193,7 @@ export class Entity<
 > {
   $attributes: AttributesBase<NKA, KA, IKA>;
 
-  declare $dto: { [V in keyof NKA]: InferItemAttributeValue<NKA, V> };
+  declare $dto: { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> } & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> };
 
   constructor({ attributes, ...rest  }: Omit<
     EntityConstructor<
