@@ -303,7 +303,8 @@ export class Entity<
     >
   > {
     /* eslint-disable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */
-    const putParams = options.returnStored && await super.put(item, { ...options, execute: false }, params);
+    const { returnStored, ...libOptions } = options;
+    const putParams = returnStored && await super.put(item, { ...libOptions, execute: false }, params);
     const itemToStore = putParams && this.parse(putParams.Item);
     const { Attributes, ...result } = await super.put(itemToStore || item, options, params);
     if (Attributes) result.OldItem = Attributes;
