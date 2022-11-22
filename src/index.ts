@@ -1,7 +1,8 @@
 import * as crypto from 'crypto';
+import type { DocumentClient } from 'aws-sdk/clients/dynamodb'
 import base64url from 'base64url';
 import { Table as _Table, Entity as DynamoDBToolboxEntity } from 'dynamodb-toolbox';
-import type { Entity as EntityKlass, Table as TableKlass } from 'dynamodb-toolbox-types';
+import type { Table as TableKlass } from 'dynamodb-toolbox-types';
 import type {
   PartitionKeyDefinition,
   PureAttributeDefinition,
@@ -16,9 +17,11 @@ import type {
   InferItem,
   InferCompositePrimaryKey,
 } from 'dynamodb-toolbox-types/dist/classes/Entity';
+import type { $PutOptions, ShouldExecute, ShouldParse } from 'dynamodb-toolbox-types/dist/classes/Entity/types';
 import type { DynamoDBTypes, TableDef } from 'dynamodb-toolbox-types/dist/classes/Table';
-import type { If } from 'dynamodb-toolbox-types/dist/lib/utils';
-import type { A, O } from 'ts-toolbelt';
+import type { If, FirstDefined } from 'dynamodb-toolbox-types/dist/lib/utils';
+import type { A, O, B } from 'ts-toolbelt';
+import type { EntityKlass } from './EntityKlass';
 
 export const Table = _Table as unknown as typeof TableKlass;
 
@@ -51,7 +54,9 @@ type HasDefault<NKA extends NonKeyAttributes, K extends keyof NKA> = NKA[K] exte
   : false;
 type Required<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (IsOptional<NKA, K> extends true ? never : K) }[keyof NKA];
 type AlwaysPresent<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (HasDefault<NKA, K> extends true ? K : never) }[keyof NKA];
-type MaybeAbsent<NKA extends NonKeyAttributes> = { [K in keyof NKA]: (IsOptional<NKA, K> extends true ? (HasDefault<NKA, K> extends true ? never : K) : never) }[keyof NKA];
+type MaybeAbsent<NKA extends NonKeyAttributes> = {
+  [K in keyof NKA]: (IsOptional<NKA, K> extends true ? (HasDefault<NKA, K> extends true ? never : K) : never)
+}[keyof NKA];
 
 class AttributesBase<NKA extends NonKeyAttributes, KA extends KeyAttributes, IKA extends IndexKeyAttributes> {
   constructor(public nonKeyAttributes: NKA, public keys: KA, public indexKeys: IKA) {}
@@ -193,7 +198,15 @@ export class Entity<
 > {
   $attributes: AttributesBase<NKA, KA, IKA>;
 
-  declare $dto: { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> } & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> };
+  declare $dto:
+    & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
+    & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> }
+    & { [V in AlwaysPresent<NKA>]?: InferItemAttributeValue<NKA, V> };
+
+  declare $data:
+    & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
+    & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> }
+    & { [V in AlwaysPresent<NKA>]: InferItemAttributeValue<NKA, V> };
 
   constructor({ attributes, ...rest  }: Omit<
     EntityConstructor<
@@ -237,6 +250,66 @@ export class Entity<
   indexKey<IK extends keyof IKA>(indexKeyAttribute: IK, v: Parameters<IKA[IK]["default"]>[0]): typeof v {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-return
     return this.$attributes.indexKeys[indexKeyAttribute].default(v);
+  }
+
+  async put<
+    _MethodItemOverlay extends Overlay = undefined,
+    _ShownItemAttributes extends A.Key = If<
+      A.Equals<_MethodItemOverlay, undefined>,
+      _Attributes['shown'],
+      keyof _MethodItemOverlay
+    >,
+    _ResponseAttributes extends _ShownItemAttributes = _ShownItemAttributes,
+    _ReturnValues extends 'NONE'|'ALL_OLD' = 'NONE',
+    _Execute extends boolean | undefined = undefined,
+    _Parse extends boolean | undefined = undefined,
+    _StrictSchemaCheck extends boolean | undefined = true,
+    ReturnStored extends boolean | undefined = undefined,
+  >(
+    item: typeof this.$dto,
+    options:
+      & $PutOptions<_ResponseAttributes, _ReturnValues, _Execute, _Parse, _StrictSchemaCheck>
+      & { returnStored?: ReturnStored }
+    = {},
+    params: Partial<DocumentClient.PutItemInput> = {}
+  ): Promise<
+    If<
+      B.Not<ShouldExecute<_Execute, _AutoExecute>>,
+      DocumentClient.PutItemInput,
+      If<
+        B.Not<ShouldParse<_Parse, _AutoParse>>,
+        DocumentClient.PutItemOutput,
+        // If MethodItemOverlay is defined, ReturnValues is not inferred from args anymore
+        O.Omit<DocumentClient.PutItemOutput, 'Attributes'>
+          & If<
+            B.And<A.Equals<_ReturnValues, 'NONE'>, A.Equals<_MethodItemOverlay, undefined>>,
+            {},
+            {
+              OldItem: FirstDefined<
+                [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
+              >
+            }
+          >
+          & If<
+            A.Equals<ReturnStored, true>,
+            {
+              StoredItem: FirstDefined<
+                [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
+              >
+            },
+            {}
+          >
+      >
+    >
+  > {
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */
+    const putParams = options.returnStored && await super.put(item, { ...options, execute: false }, params);
+    const itemToStore = putParams && this.parse(putParams.Item);
+    const { Attributes, ...result } = await super.put(itemToStore || item, options, params);
+    if (Attributes) result.OldItem = Attributes;
+    if (itemToStore) result.StoredItem = itemToStore;
+    return result;
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */
   }
 
   // queryIndex(index: <sum type>, {...})
