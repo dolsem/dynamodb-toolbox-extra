@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import type { DocumentClient } from 'aws-sdk/clients/dynamodb'
+import type { DocumentClient } from 'aws-sdk/clients/dynamodb';
 import base64url from 'base64url';
 import { Table as _Table, Entity as DynamoDBToolboxEntity } from 'dynamodb-toolbox';
 import type { Table as TableKlass } from 'dynamodb-toolbox-types';
@@ -16,11 +16,12 @@ import type {
   ParsedAttributes,
   InferItem,
   InferCompositePrimaryKey,
+  $GetOptions,
 } from 'dynamodb-toolbox-types/dist/classes/Entity';
 import type { $PutOptions, ShouldExecute, ShouldParse } from 'dynamodb-toolbox-types/dist/classes/Entity/types';
 import type { DynamoDBTypes, TableDef } from 'dynamodb-toolbox-types/dist/classes/Table';
 import type { If, FirstDefined } from 'dynamodb-toolbox-types/dist/lib/utils';
-import type { A, O, B } from 'ts-toolbelt';
+import type { A, O, B, U } from 'ts-toolbelt';
 import type { EntityKlass } from './EntityKlass';
 
 export const Table = _Table as unknown as typeof TableKlass;
@@ -198,6 +199,9 @@ export class Entity<
 > {
   $attributes: AttributesBase<NKA, KA, IKA>;
 
+  declare $primaryKey: Record<keyof KA, string>;
+  declare $primaryKeyDependees: U.IntersectOf<Parameters<KA[keyof KA]["default"]>[0]>;
+
   declare $dto:
     & { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }
     & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> }
@@ -250,6 +254,45 @@ export class Entity<
   indexKey<IK extends keyof IKA>(indexKeyAttribute: IK, v: Parameters<IKA[IK]["default"]>[0]): typeof v {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-return
     return this.$attributes.indexKeys[indexKeyAttribute].default(v);
+  }
+
+  primaryKey(item: typeof this.$primaryKeyDependees) {
+    return Object.keys(this.$attributes.keys).reduce(
+      (primaryKey, attribute: keyof KA) => Object.assign(primaryKey, {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        [attribute]: this.$attributes.keys[attribute].default(item) as string,
+      }),
+      {} as typeof this.$primaryKey,
+    );
+  }
+
+  get<
+    _MethodItemOverlay extends Overlay = undefined,
+    _ShownItemAttributes extends A.Key = If<A.Equals<_MethodItemOverlay, undefined>, _Attributes['shown'], keyof _MethodItemOverlay>,
+    _ResponseAttributes extends _ShownItemAttributes = _ShownItemAttributes,
+    _Execute extends boolean | undefined = undefined,
+    _Parse extends boolean | undefined = undefined
+  >(
+    item: typeof this.$primaryKeyDependees,
+    options?: $GetOptions<_ResponseAttributes, _Execute, _Parse>,
+    params?: Partial<DocumentClient.GetItemInput>,
+  ): Promise<If<
+    B.Not<ShouldExecute<_Execute, _AutoExecute>>,
+    DocumentClient.GetItemInput,
+    If<
+      B.Not<ShouldParse<_Parse, _AutoParse>>,
+      DocumentClient.GetItemOutput,
+      A.Compute<O.Update<DocumentClient.GetItemOutput, 'Item', FirstDefined<[_MethodItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]>>>
+    >
+  >> {
+    const primaryKey = this.primaryKey(item);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return super.get(primaryKey, options, params);
+  }
+
+  getBatch(item: typeof this.$primaryKeyDependees) {
+    const primaryKey = this.primaryKey(item);
+    return super.getBatch(primaryKey);
   }
 
   async put<

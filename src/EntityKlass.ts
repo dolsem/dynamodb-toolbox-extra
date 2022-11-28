@@ -60,7 +60,17 @@ export class EntityKlass<
   _Item,
   _CompositePrimaryKey
 > {
-  override put(...args: any): any {
+  override put(...args: any[]): any {
     return null;
+  }
+
+  override get(...args: any[]): any {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call
+    return (super.get as any).apply(this, args);
+  }
+    
+  override getBatch<_MethodCompositeKeyOverlay extends Overlay = undefined>(item: any) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return super.getBatch<_MethodCompositeKeyOverlay>(item);
   }
 }
