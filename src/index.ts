@@ -17,6 +17,10 @@ import type {
   InferItem,
   InferCompositePrimaryKey,
   $GetOptions,
+  UpdateOptionsReturnValues,
+  $UpdateOptions,
+  UpdateItem,
+  UpdateCustomParams,
 } from 'dynamodb-toolbox-types/dist/classes/Entity';
 import type { $PutOptions, ShouldExecute, ShouldParse } from 'dynamodb-toolbox-types/dist/classes/Entity/types';
 import type { DynamoDBTypes, TableDef } from 'dynamodb-toolbox-types/dist/classes/Table';
@@ -356,6 +360,62 @@ export class Entity<
     if (itemToStore) result.StoredItem = itemToStore;
     return result;
     /* eslint-enable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */
+  }
+
+  update<
+    _MethodItemOverlay extends Overlay = undefined,
+    _ShownItemAttributes extends A.Key = If<A.Equals<_MethodItemOverlay, undefined>, _Attributes['shown'], keyof _MethodItemOverlay>,
+    _ResponseAttributes extends _ShownItemAttributes = _ShownItemAttributes,
+    _ReturnValues extends UpdateOptionsReturnValues = 'NONE',
+    _Execute extends boolean | undefined = undefined,
+    _Parse extends boolean | undefined = undefined,
+    _StrictSchemaCheck extends boolean | undefined = true,
+  >(
+    item: A.Compute<typeof this.$primaryKeyDependees & {
+      [inputAttr in _Attributes['always']['input']]: _Item[A.Cast<inputAttr, keyof _Item>] | {
+        $delete?: string[];
+        $add?: any;
+        $prepend?: any[];
+        $append?: any[];
+      };
+    } & {
+      [optAttr in _Attributes['required']['all'] | _Attributes['always']['default']]?: _Item[A.Cast<optAttr, keyof _Item>] | {
+        $delete?: string[];
+        $add?: any;
+        $prepend?: any[];
+        $append?: any[];
+      };
+    } & {
+      [attr in _Attributes['optional']]?: null | _Item[A.Cast<attr, keyof _Item>] | {
+        $delete?: string[];
+        $add?: any;
+        $append?: any[];
+        $prepend?: any[];
+      };
+    } & {
+      $remove?: _Attributes['optional'] | _Attributes['optional'][];
+    }>,
+    options?: $UpdateOptions<_ResponseAttributes, _ReturnValues, _Execute, _Parse, _StrictSchemaCheck>,
+    params?: UpdateCustomParams
+  ): Promise<A.Compute<If<
+    B.Not<ShouldExecute<_Execute, _AutoExecute>>,
+    DocumentClient.UpdateItemInput,
+    If<
+      B.Not<ShouldParse<_Parse, _AutoParse>>,
+      DocumentClient.UpdateItemOutput,
+      If<
+        B.And<A.Equals<_ReturnValues, 'NONE'>, A.Equals<_MethodItemOverlay, undefined>>,
+        O.Omit<DocumentClient.UpdateItemOutput, 'Attributes'>,
+        O.Update<
+          DocumentClient.UpdateItemOutput,
+          'Attributes',
+          FirstDefined<[_MethodItemOverlay, _EntityItemOverlay, O.Pick<_Item, _ResponseAttributes>]>
+        >
+      >
+    >
+  >>> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return super.update(item, options, params);
   }
 
   // queryIndex(index: <sum type>, {...})

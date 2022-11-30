@@ -68,6 +68,11 @@ export class EntityKlass<
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call
     return (super.get as any).apply(this, args);
   }
+
+  override update(...args: any[]): any {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call
+    return (super.update as any).apply(this, args);
+  }
     
   override getBatch<_MethodCompositeKeyOverlay extends Overlay = undefined>(item: any) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
