@@ -226,30 +226,6 @@ export class Entity<
     this.$attributes = attributes;
   }
 
-  getHashId(item: { [V in Required<NKA>]: InferItemAttributeValue<NKA, V> }) {
-    const tuple = [] as string[];
-    Object.values(this.$attributes.keys).forEach(({ partitionKey, sortKey, default: get }) => {
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-call */
-      if (partitionKey) tuple[0] = get(item) as string;
-      else if (sortKey) tuple[1] = get(item) as string;
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-call */
-    });
-    return hash(tuple);
-  }
-
-  parseHashId(hashId: string) {
-    const tuple = dehash(hashId) as [string, string];
-    const key = {} as { [K in keyof KA]: string };
-    Object.keys(this.$attributes.keys).forEach((name: keyof KA) => {
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-assignment */
-      const { partitionKey, sortKey } = this.$attributes.keys[name];
-      if (partitionKey) key[name] = tuple[0];
-      else if (sortKey) key[name] = tuple[1];
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-assignment */
-    });
-    return key;
-  }
-
   key<K extends keyof KA>(keyAttribute: K, v: Parameters<KA[K]["default"]>[0]): string {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-return
     return this.$attributes.keys[keyAttribute].default(v);
@@ -416,6 +392,30 @@ export class Entity<
   >>> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return super.update(item, options, params);
+  }
+
+  getHashId(item: typeof this.$primaryKeyDependees) {
+    const tuple = [] as string[];
+    Object.values(this.$attributes.keys).forEach(({ partitionKey, sortKey, default: get }) => {
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-call */
+      if (partitionKey) tuple[0] = get(item) as string;
+      else if (sortKey) tuple[1] = get(item) as string;
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-call */
+    });
+    return hash(tuple);
+  }
+
+  parseHashId(hashId: string) {
+    const tuple = dehash(hashId) as [string, string];
+    const key = {} as { [K in keyof KA]: string };
+    Object.keys(this.$attributes.keys).forEach((name: keyof KA) => {
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-assignment */
+      const { partitionKey, sortKey } = this.$attributes.keys[name];
+      if (partitionKey) key[name] = tuple[0];
+      else if (sortKey) key[name] = tuple[1];
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-unsafe-assignment */
+    });
+    return key;
   }
 
   // queryIndex(index: <sum type>, {...})
