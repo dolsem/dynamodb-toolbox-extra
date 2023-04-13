@@ -40,8 +40,8 @@ export class EntityKlass<
   >,
   _Item extends O.Object = string extends _Name ? O.Object : A.Cast<_$Item, O.Object>,
   _CompositePrimaryKey extends O.Object = string extends _Name
-    ? O.Object
-    : If<A.Equals<_EntityItemOverlay, undefined>,InferCompositePrimaryKey<_Item, _Attributes>, O.Object>,
+  ? O.Object
+  : If<A.Equals<_EntityItemOverlay, undefined>, InferCompositePrimaryKey<_Item, _Attributes>, O.Object>,
 > extends Entity<
   _Name,
   _EntityItemOverlay,
@@ -73,9 +73,14 @@ export class EntityKlass<
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call
     return (super.update as any).apply(this, args);
   }
-    
+
   override getBatch<_MethodCompositeKeyOverlay extends Overlay = undefined>(item: any) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return super.getBatch<_MethodCompositeKeyOverlay>(item);
+  }
+
+  override putTransaction(...args: any[]): any {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call
+    return (super.putTransaction as any).apply(this, args);
   }
 }

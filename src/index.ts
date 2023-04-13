@@ -22,13 +22,35 @@ import type {
   UpdateItem,
   UpdateCustomParams,
 } from 'dynamodb-toolbox-types/dist/classes/Entity';
-import type { $PutOptions, ShouldExecute, ShouldParse } from 'dynamodb-toolbox-types/dist/classes/Entity/types';
-import type { DynamoDBTypes, TableDef } from 'dynamodb-toolbox-types/dist/classes/Table';
+import type { $PutOptions, PutItem, ShouldExecute, ShouldParse, TransactionOptions } from 'dynamodb-toolbox-types/dist/classes/Entity/types';
+import type { DynamoDBTypes, TableDef, TransactWriteOptions } from 'dynamodb-toolbox-types/dist/classes/Table';
 import type { If, FirstDefined } from 'dynamodb-toolbox-types/dist/lib/utils';
 import type { A, O, B, U } from 'ts-toolbelt';
 import type { EntityKlass } from './EntityKlass';
 
-export const Table = _Table as unknown as typeof TableKlass;
+export const TableBase = _Table as unknown as typeof TableKlass;
+
+export class Table<Name extends string, PartitionKey extends A.Key, SortKey extends A.Key> extends TableBase<Name, PartitionKey, SortKey> {
+  async transactWrite<ReturnStored extends boolean | undefined = undefined>(
+    items: Array<DocumentClient.TransactWriteItem & { _entity?: Entity<any, any, any> }>,
+    options?: TransactWriteOptions & { returnStored?: boolean },
+    params?: Partial<DocumentClient.TransactWriteItemsInput>
+  ): Promise<DocumentClient.TransactWriteItemsInput | (
+    DocumentClient.TransactWriteItemsOutput
+    & If<A.Equals<ReturnStored, true>, { PutItems: unknown[] }, {}>
+  )> {
+    const result = await super.transactWrite(items, options, params);
+    if (Object.prototype.hasOwnProperty.call(result, 'TransactItems')) {
+      return result as DocumentClient.TransactWriteItemsInput;
+    }
+    if (options?.returnStored) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      (result as any).PutItems = items.map((x) => x.Put && (x._entity ? x._entity.parse(x.Put) : x.Put));
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any,@typescript-eslint/no-unsafe-return
+    return result as any;
+  }
+}
 
 let salt: string | Buffer | NodeJS.TypedArray | DataView;
 export const setSalt = (v: typeof salt) => { salt = v; };
@@ -43,10 +65,10 @@ const dehash = (value: string): unknown => checkSalt()
 
 const _Entity = DynamoDBToolboxEntity as unknown as typeof EntityKlass;
 
-type FixedAttributeDefinition = Omit<PureAttributeDefinition, 'default'>&{ default?: unknown };
-type NonKeyAttribute = DynamoDBTypes|FixedAttributeDefinition;
+type FixedAttributeDefinition = Omit<PureAttributeDefinition, 'default'> & { default?: unknown };
+type NonKeyAttribute = DynamoDBTypes | FixedAttributeDefinition;
 type NonKeyAttributes = Record<string, NonKeyAttribute>;
-type KeyAttributes = Record<string, SortKeyDefinition|PartitionKeyDefinition>;
+type KeyAttributes = Record<string, SortKeyDefinition | PartitionKeyDefinition>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface IndexKeyAttribute { hidden: true, default: (d: any) => string }
 type IndexKeyAttributes = Record<string, IndexKeyAttribute>;
@@ -64,16 +86,16 @@ type MaybeAbsent<NKA extends NonKeyAttributes> = {
 }[keyof NKA];
 
 class AttributesBase<NKA extends NonKeyAttributes, KA extends KeyAttributes, IKA extends IndexKeyAttributes> {
-  constructor(public nonKeyAttributes: NKA, public keys: KA, public indexKeys: IKA) {}
+  constructor(public nonKeyAttributes: NKA, public keys: KA, public indexKeys: IKA) { }
 
-  get definitions(): NKA&KA&IKA {
+  get definitions(): NKA & KA & IKA {
     return Object.assign({}, this.nonKeyAttributes, this.keys, this.indexKeys);
   }
 }
 
 class AttributesWithoutIndexKeys<NKA extends NonKeyAttributes, KA extends KeyAttributes> extends AttributesBase<NKA, KA, {}> {
   addIndexKeys<
-    D extends Record<string, (Required<NKA>|AlwaysPresent<NKA>)[]>,
+    D extends Record<string, (Required<NKA> | AlwaysPresent<NKA>)[]>,
     T extends { [N in keyof D]: (v: { [V in D[N][number]]: InferItemAttributeValue<NKA, V> }) => string[] },
   >({ get: indexKeys }: { get: T, deps?: D }) {
     type Data =
@@ -91,7 +113,7 @@ class AttributesWithoutIndexKeys<NKA extends NonKeyAttributes, KA extends KeyAtt
 class AttributesWithPartitionKey<
   NKA extends NonKeyAttributes, KA extends KeyAttributes
 > extends AttributesWithoutIndexKeys<NKA, KA> {
-  addSortKey<N extends string, D extends (Required<NKA>|AlwaysPresent<NKA>)[]>(
+  addSortKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[]>(
     name: N,
     { get }: {
       get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
@@ -112,9 +134,9 @@ class AttributesWithPartitionKey<
 }
 
 export class Attributes<NKA extends NonKeyAttributes> {
-  constructor(public nonKeyAttributes: NKA) {}
+  constructor(public nonKeyAttributes: NKA) { }
 
-  addPartitionKey<N extends string, D extends (Required<NKA>|AlwaysPresent<NKA>)[]>(
+  addPartitionKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[]>(
     name: N,
     { get }: {
       get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
@@ -137,7 +159,7 @@ export class Attributes<NKA extends NonKeyAttributes> {
 }
 
 export class GSI<PK extends string, SK extends string> {
-  constructor(public name: string, public keys: { partitionKey?: PK, sortKey?: SK }) {}
+  constructor(public name: string, public keys: { partitionKey?: PK, sortKey?: SK }) { }
 
   toString() {
     return this.name;
@@ -166,7 +188,7 @@ export class Entity<
   _CreatedAlias extends string = string extends _Name ? string : 'created',
   _ModifiedAlias extends string = string extends _Name ? string : 'modified',
   _TypeAlias extends string = string extends _Name ? string : 'entity',
-  _ReadonlyAttributeDefinitions extends NKA&KA&IKA = NKA&KA&IKA,
+  _ReadonlyAttributeDefinitions extends NKA & KA & IKA = NKA & KA & IKA,
   _WritableAttributeDefinitions extends AttributeDefinitions = Writable<_ReadonlyAttributeDefinitions>,
   _Attributes extends ParsedAttributes = string extends _Name ? ParsedAttributes : If<
     A.Equals<_EntityItemOverlay, undefined>,
@@ -181,8 +203,8 @@ export class Entity<
   >,
   _Item extends O.Object = string extends _Name ? O.Object : A.Cast<_$Item, O.Object>,
   _CompositePrimaryKey extends O.Object = string extends _Name
-    ? O.Object
-    : If<A.Equals<_EntityItemOverlay, undefined>,InferCompositePrimaryKey<_Item, _Attributes>, O.Object>,
+  ? O.Object
+  : If<A.Equals<_EntityItemOverlay, undefined>, InferCompositePrimaryKey<_Item, _Attributes>, O.Object>,
 > extends _Entity<
   _Name,
   _EntityItemOverlay,
@@ -216,12 +238,12 @@ export class Entity<
     & { [V in MaybeAbsent<NKA>]?: InferItemAttributeValue<NKA, V> }
     & { [V in AlwaysPresent<NKA>]: InferItemAttributeValue<NKA, V> };
 
-  constructor({ attributes, ...rest  }: Omit<
+  constructor({ attributes, ...rest }: Omit<
     EntityConstructor<
       _EntityTable, _Name, _AutoExecute, _AutoParse, _Timestamps, _CreatedAlias, _ModifiedAlias, _TypeAlias, {}
     >,
     'attributes'
-  >&{ attributes: AttributesBase<NKA, KA, IKA> }) {
+  > & { attributes: AttributesBase<NKA, KA, IKA> }) {
     super({ attributes: attributes.definitions as _ReadonlyAttributeDefinitions, ...rest });
     this.$attributes = attributes;
   }
@@ -283,7 +305,7 @@ export class Entity<
       keyof _MethodItemOverlay
     >,
     _ResponseAttributes extends _ShownItemAttributes = _ShownItemAttributes,
-    _ReturnValues extends 'NONE'|'ALL_OLD' = 'NONE',
+    _ReturnValues extends 'NONE' | 'ALL_OLD' = 'NONE',
     _Execute extends boolean | undefined = undefined,
     _Parse extends boolean | undefined = undefined,
     _StrictSchemaCheck extends boolean | undefined = true,
@@ -293,7 +315,7 @@ export class Entity<
     options:
       & $PutOptions<_ResponseAttributes, _ReturnValues, _Execute, _Parse, _StrictSchemaCheck>
       & { returnStored?: ReturnStored }
-    = {},
+      = {},
     params: Partial<DocumentClient.PutItemInput> = {}
   ): Promise<
     If<
@@ -304,28 +326,28 @@ export class Entity<
         DocumentClient.PutItemOutput,
         // If MethodItemOverlay is defined, ReturnValues is not inferred from args anymore
         O.Omit<DocumentClient.PutItemOutput, 'Attributes'>
-          & If<
-            B.And<A.Equals<_ReturnValues, 'NONE'>, A.Equals<_MethodItemOverlay, undefined>>,
-            {},
-            {
-              OldItem: FirstDefined<
-                [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
-              >
-            }
-          >
-          & If<
-            A.Equals<ReturnStored, true>,
-            {
-              StoredItem: FirstDefined<
-                [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
-              >
-            },
-            {}
-          >
+        & If<
+          B.And<A.Equals<_ReturnValues, 'NONE'>, A.Equals<_MethodItemOverlay, undefined>>,
+          {},
+          {
+            OldItem: FirstDefined<
+              [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
+            >
+          }
+        >
+        & If<
+          A.Equals<ReturnStored, true>,
+          {
+            StoredItem: FirstDefined<
+              [_MethodItemOverlay, _EntityItemOverlay, A.Compute<O.Pick<_Item, _ResponseAttributes>>]
+            >
+          },
+          {}
+        >
       >
     >
   > {
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */    
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return */
     const { returnStored, ...libOptions } = options;
     if (libOptions.execute === false) return await super.put(item, libOptions, params);
 
@@ -355,22 +377,22 @@ export class Entity<
         $append?: any[];
       };
     } & {
-      [optAttr in _Attributes['required']['all'] | _Attributes['always']['default']]?: _Item[A.Cast<optAttr, keyof _Item>] | {
-        $delete?: string[];
-        $add?: any;
-        $prepend?: any[];
-        $append?: any[];
-      };
-    } & {
-      [attr in _Attributes['optional']]?: null | _Item[A.Cast<attr, keyof _Item>] | {
-        $delete?: string[];
-        $add?: any;
-        $append?: any[];
-        $prepend?: any[];
-      };
-    } & {
-      $remove?: _Attributes['optional'] | _Attributes['optional'][];
-    }>,
+        [optAttr in _Attributes['required']['all'] | _Attributes['always']['default']]?: _Item[A.Cast<optAttr, keyof _Item>] | {
+          $delete?: string[];
+          $add?: any;
+          $prepend?: any[];
+          $append?: any[];
+        };
+      } & {
+        [attr in _Attributes['optional']]?: null | _Item[A.Cast<attr, keyof _Item>] | {
+          $delete?: string[];
+          $add?: any;
+          $append?: any[];
+          $prepend?: any[];
+        };
+      } & {
+        $remove?: _Attributes['optional'] | _Attributes['optional'][];
+      }>,
     options?: $UpdateOptions<_ResponseAttributes, _ReturnValues, _Execute, _Parse, _StrictSchemaCheck>,
     params?: UpdateCustomParams
   ): Promise<A.Compute<If<
@@ -392,6 +414,21 @@ export class Entity<
   >>> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return super.update(item, options, params);
+  }
+
+  putTransaction<
+    _MethodItemOverlay extends Overlay = undefined,
+    _ItemAttributes extends A.Key = If<A.Equals<_MethodItemOverlay, undefined>, _Attributes['all'], keyof _MethodItemOverlay>,
+    _ResponseAttributes extends _ItemAttributes = _ItemAttributes,
+    _StrictSchemaCheck extends boolean | undefined = true,
+    ThisEntity = typeof this,
+  >(
+    item: PutItem<_MethodItemOverlay, _EntityItemOverlay, _CompositePrimaryKey, _Item, _Attributes, _StrictSchemaCheck>,
+    options?: TransactionOptions<_ResponseAttributes, _StrictSchemaCheck> | undefined,
+    params?: Partial<DocumentClient.PutItemInput> | undefined
+  ): { Put: DocumentClient.Put; _entity?: ThisEntity } {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return Object.assign(super.putTransaction(item, options as any, params), { _entity: this });
   }
 
   getHashId(item: typeof this.$primaryKeyDependees) {
