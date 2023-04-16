@@ -113,7 +113,7 @@ class AttributesWithoutIndexKeys<NKA extends NonKeyAttributes, KA extends KeyAtt
 class AttributesWithPartitionKey<
   NKA extends NonKeyAttributes, KA extends KeyAttributes
 > extends AttributesWithoutIndexKeys<NKA, KA> {
-  addSortKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[]>(
+  addSortKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[] = []>(
     name: N,
     { get }: {
       get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
@@ -136,7 +136,7 @@ class AttributesWithPartitionKey<
 export class Attributes<NKA extends NonKeyAttributes> {
   constructor(public nonKeyAttributes: NKA) { }
 
-  addPartitionKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[]>(
+  addPartitionKey<N extends string, D extends (Required<NKA> | AlwaysPresent<NKA>)[] = []>(
     name: N,
     { get }: {
       get: (v: { [V in D[number]]: InferItemAttributeValue<NKA, V> }) => string[];
